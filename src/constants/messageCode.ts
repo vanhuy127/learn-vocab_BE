@@ -9,6 +9,7 @@ export const MESSAGE_CODES = {
     NAME_ALREADY_EXISTS: 'NAME_ALREADY_EXISTS',
     ID_REQUIRED: 'ID_REQUIRED',
     IN_USE: 'IN_USE',
+    INVALID_TYPE: 'INVALID_TYPE',
   },
   // Auth
   AUTH: {

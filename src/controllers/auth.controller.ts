@@ -71,7 +71,7 @@ export const login = async (req: Request, res: Response) => {
     //   },
     // });
 
-    const resData = { id: user.id, email: user.email, role: user.role };
+    const resData = { id: user.id, email: user.email, role: user.role, userName: user.userName };
 
     sendResponse(res, {
       status: 200,
