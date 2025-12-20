@@ -18,7 +18,7 @@ authRouter.post('/auth/login', login);
 
 authRouter.get('/auth/me', authenticate, getMe);
 
-authRouter.get('/auth/refresh-token', refreshAccessToken);
+authRouter.post('/auth/refresh-token', refreshAccessToken);
 
 authRouter.patch('/auth/change-password', authenticate, changePassword);
 
