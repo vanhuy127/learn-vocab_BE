@@ -74,7 +74,7 @@ model StudySet {
   userId      String
   name        String
   description String?
-  language    String
+  languageId  String
   folderId    String?
   accessLevel AccessLevel  @default(PUBLIC)
   createdAt   DateTime     @default(now())
@@ -82,8 +82,20 @@ model StudySet {
   isDeleted   Boolean      @default(false)
 
   user        User         @relation(fields: [userId], references: [id])
+  language    Language     @relation(fields: [languageId], references: [id])
   folder      Folder?      @relation(fields: [folderId], references: [id])
   items       StudySetItem[]
+}
+
+model Language {
+  id          String       @id @default(uuid())
+  name        String
+  code        String
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  studySets   StudySet[]
 }
 
 model StudySetItem {
@@ -92,8 +104,10 @@ model StudySetItem {
   word       String
   meaning    String
   note       String?
+  position   Int
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
+  isDeleted   Boolean      @default(false)
 
   studySet   StudySet     @relation(fields: [studySetId], references: [id])
   progress   UserProgress[]

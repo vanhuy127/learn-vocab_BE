@@ -6,20 +6,18 @@ import {
   getFolderCurrent,
 } from '@/controllers/folder.controller';
 import { authenticate } from '@/middlewares/authenticate';
-import { authorize } from '@/middlewares/authorize';
-import { Role } from '@prisma/client';
 import express from 'express';
 
 const folderRouter = express.Router();
 
-folderRouter.post('/folder', authenticate, authorize(Role.USER, Role.ADMIN), createFolder);
+folderRouter.post('/folder', authenticate, createFolder);
 
-folderRouter.patch('/folder/:id', authenticate, authorize(Role.USER, Role.ADMIN), editFolder);
+folderRouter.put('/folder/:id', authenticate, editFolder);
 
-folderRouter.delete('/folder/:id', authenticate, authorize(Role.USER, Role.ADMIN), deleteFolder);
+folderRouter.delete('/folder/:id', authenticate, deleteFolder);
 
-folderRouter.get('/folder/current-user', authenticate, authorize(Role.USER, Role.ADMIN), getFolderCurrent);
+folderRouter.get('/folder/current-user', authenticate, getFolderCurrent);
 
-folderRouter.get('/folder/:id', authenticate, authorize(Role.USER, Role.ADMIN), getFolderById);
+folderRouter.get('/folder/:id', getFolderById);
 
 export default folderRouter;

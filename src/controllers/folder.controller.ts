@@ -39,6 +39,7 @@ export const getFolderCurrent = async (req: Request, res: Response) => {
         name: true,
         description: true,
         createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,
@@ -279,6 +280,7 @@ export const editFolder = async (req: Request, res: Response) => {
   }
 };
 
+//TODO: xóa các folderId ở các study set con trong folder
 export const deleteFolder = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;

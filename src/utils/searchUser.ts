@@ -20,9 +20,16 @@ export const getStudySets = async (skip: number, size: number, search: string) =
         id: true,
         name: true,
         description: true,
-        language: true,
         accessLevel: true,
         createdAt: true,
+        updatedAt: true,
+        language: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
         _count: {
           select: {
             items: true,
@@ -64,6 +71,7 @@ export const getFolders = async (skip: number, size: number, search: string) => 
         name: true,
         description: true,
         createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,
@@ -113,6 +121,7 @@ export const getTests = async (skip: number, size: number, search: string) => {
         description: true,
         duration: true,
         createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,
@@ -159,6 +168,7 @@ export const getUsers = async (skip: number, size: number, search: string) => {
         id: true,
         userName: true,
         createdAt: true,
+        updatedAt: true,
         _count: {
           select: {
             folders: true,

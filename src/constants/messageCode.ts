@@ -10,6 +10,7 @@ export const MESSAGE_CODES = {
     ID_REQUIRED: 'ID_REQUIRED',
     IN_USE: 'IN_USE',
     INVALID_TYPE: 'INVALID_TYPE',
+    INVALID_LANGUAGE: 'INVALID_LANGUAGE',
   },
   // Auth
   AUTH: {

@@ -5,6 +5,7 @@ import userSearchRouter from './routes/search.router';
 import folderRouter from './routes/folder.router';
 import studySetRouter from './routes/studySet.router';
 import testRouter from './routes/test.router';
+import languageRouter from './routes/language.router';
 
 require('dotenv').config();
 
@@ -27,6 +28,7 @@ app.use('/api/v1', userSearchRouter);
 app.use('/api/v1', folderRouter);
 app.use('/api/v1', studySetRouter);
 app.use('/api/v1', testRouter);
+app.use('/api/v1', languageRouter);
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);

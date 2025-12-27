@@ -39,6 +39,7 @@ export const getTestCurrent = async (req: Request, res: Response) => {
         description: true,
         duration: true,
         createdAt: true,
+        updatedAt: true,
         user: {
           select: {
             id: true,
