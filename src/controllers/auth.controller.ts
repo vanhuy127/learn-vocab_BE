@@ -200,6 +200,12 @@ export const getMe = async (req: Request, res: Response) => {
 
     const user = await db.user.findUnique({
       where: { id },
+      select: {
+        id: true,
+        userName: true,
+        email: true,
+        role: true,
+      },
     });
 
     if (!user) {

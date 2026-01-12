@@ -22,7 +22,6 @@ enum AccessLevel {
 
 enum Status {
   LEARNING
-  REVIEWING
   MASTERED
   NEW
 }

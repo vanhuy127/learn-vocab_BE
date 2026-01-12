@@ -1,8 +1,11 @@
 import db from '@/config/prisma.config';
 import { MESSAGE_CODES } from '@/constants';
+import { StudySetItemWithProgress } from '@/type';
 import { sendResponse } from '@/utils';
+import { getNextReview } from '@/utils/handleTime';
 import { createStudySetSchema } from '@/validations';
 import { AccessLevel } from '@prisma/client';
+import { addDays } from 'date-fns';
 import { Request, Response } from 'express';
 
 export const getStudySetCurrent = async (req: Request, res: Response) => {
@@ -193,11 +196,11 @@ export const createStudySet = async (req: Request, res: Response) => {
     });
   }
 };
-
 export const getStudySetById = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const userId = req.user?.id;
+    const trackingProgress = req.query.trackingProgress || 'false';
 
     if (!id) {
       sendResponse(res, {
@@ -222,18 +225,52 @@ export const getStudySetById = async (req: Request, res: Response) => {
       });
       return;
     }
+    const now = new Date();
 
     const studySet = await db.studySet.findUnique({
-      where: { id, userId, isDeleted: false },
+      where: {
+        id,
+        isDeleted: false,
+      },
       include: {
         language: true,
         folder: true,
         items: {
           where: {
             isDeleted: false,
+            ...(trackingProgress === 'true' && {
+              OR: [
+                // 1️⃣ Item CHƯA từng học (không có progress)
+                {
+                  progress: {
+                    none: {
+                      userId,
+                    },
+                  },
+                },
+                // 2️⃣ Item ĐẾN HẠN ôn tập
+                {
+                  progress: {
+                    some: {
+                      userId,
+                      nextReview: {
+                        lte: now,
+                      },
+                    },
+                  },
+                },
+              ],
+            }),
           },
           orderBy: {
             position: 'asc',
+          },
+          include: {
+            progress: {
+              where: {
+                userId,
+              },
+            },
           },
         },
       },
@@ -246,6 +283,27 @@ export const getStudySetById = async (req: Request, res: Response) => {
         message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
       });
       return;
+    }
+
+    if (trackingProgress === 'true') {
+      const grouped: {
+        new: StudySetItemWithProgress[];
+        learning: StudySetItemWithProgress[];
+        master: StudySetItemWithProgress[];
+      } = {
+        new: [],
+        learning: [],
+        master: [],
+      };
+
+      for (const item of studySet.items) {
+        const p = item.progress[0];
+        if (!p || p.status === 'NEW') grouped.new.push(item);
+        else if (p.status === 'LEARNING') grouped.learning.push(item);
+        else grouped.master.push(item);
+      }
+
+      studySet.items = [...grouped.new, ...grouped.learning, ...grouped.master];
     }
 
     sendResponse(res, {
@@ -313,8 +371,6 @@ export const editStudySet = async (req: Request, res: Response) => {
     }
 
     const { title, description, accessLevel, languageId, folderId, items } = parsed.data;
-
-    console.log('Data:', parsed.data);
 
     const languageExisted = await db.language.findUnique({
       where: {
@@ -466,6 +522,99 @@ export const deleteStudySet = async (req: Request, res: Response) => {
       status: 200,
       success: true,
       message_code: MESSAGE_CODES.SUCCESS.DELETED_SUCCESS,
+    });
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
+
+export const submitStudySetItem = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const userId = req.user?.id;
+    const { isCorrect } = req.body;
+
+    if (!id) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.ID_REQUIRED,
+      });
+      return;
+    }
+
+    const itemExisted = await db.studySetItem.findUnique({
+      where: {
+        id,
+        isDeleted: false,
+      },
+      include: {
+        progress: {
+          where: {
+            userId,
+          },
+        },
+      },
+    });
+
+    if (!itemExisted) {
+      sendResponse(res, {
+        status: 404,
+        success: false,
+        message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
+      });
+      return;
+    }
+
+    if (itemExisted.progress.length === 0) {
+      // lần đầu học từ này
+      await db.userProgress.create({
+        data: {
+          userId,
+          itemId: itemExisted.id,
+          status: isCorrect ? 'LEARNING' : 'NEW',
+          correctCount: isCorrect ? 1 : 0,
+          wrongCount: isCorrect ? 0 : 1,
+          lastStudiedAt: new Date(),
+          nextReview: isCorrect ? addDays(new Date(), 1) : addDays(new Date(), 1),
+        },
+      });
+    } else {
+      const progress = itemExisted.progress[0];
+      if (isCorrect) {
+        const newCorrectCount = progress.correctCount + 1;
+        await db.userProgress.update({
+          where: { id: progress.id },
+          data: {
+            status: newCorrectCount >= 4 ? 'MASTERED' : 'LEARNING',
+            correctCount: newCorrectCount,
+            lastStudiedAt: new Date(),
+            nextReview: getNextReview(newCorrectCount),
+          },
+        });
+      } else {
+        await db.userProgress.update({
+          where: { id: progress.id },
+          data: {
+            status: 'LEARNING',
+            correctCount: 0,
+            wrongCount: progress.wrongCount + 1,
+            nextReview: addDays(new Date(), 1),
+            lastStudiedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      message_code: MESSAGE_CODES.SUCCESS.UPDATED_SUCCESS,
     });
   } catch (error) {
     console.error(error);

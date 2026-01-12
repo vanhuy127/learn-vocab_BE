@@ -4,6 +4,7 @@ import {
   editStudySet,
   getStudySetById,
   getStudySetCurrent,
+  submitStudySetItem,
 } from '@/controllers/studySet.controller';
 import { authenticate } from '@/middlewares/authenticate';
 import express from 'express';
@@ -19,5 +20,7 @@ studySetRouter.delete('/study-set/:id', authenticate, deleteStudySet);
 studySetRouter.get('/study-set/current-user', authenticate, getStudySetCurrent);
 
 studySetRouter.get('/study-set/:id', authenticate, getStudySetById);
+
+studySetRouter.post('/study-item/:id/answer', authenticate, submitStudySetItem);
 
 export default studySetRouter;

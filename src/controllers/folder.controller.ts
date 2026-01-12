@@ -280,7 +280,6 @@ export const editFolder = async (req: Request, res: Response) => {
   }
 };
 
-//TODO: xóa các folderId ở các study set con trong folder
 export const deleteFolder = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
@@ -294,23 +293,40 @@ export const deleteFolder = async (req: Request, res: Response) => {
       return;
     }
 
-    const studySetCount = await db.studySet.count({
-      where: { folderId: id },
+    const folder = await db.folder.findFirst({
+      where: {
+        id,
+        isDeleted: false,
+      },
     });
 
-    if (studySetCount > 0) {
+    if (!folder) {
       sendResponse(res, {
-        status: 400,
+        status: 404,
         success: false,
-        message_code: MESSAGE_CODES.VALIDATION.IN_USE,
+        message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
       });
       return;
     }
 
-    await db.folder.update({
-      where: { id },
-      data: { isDeleted: true },
-    });
+    await db.$transaction([
+      // 1. Gỡ liên kết folder khỏi các study set con
+      db.studySet.updateMany({
+        where: {
+          folderId: id,
+          isDeleted: false,
+        },
+        data: {
+          folderId: null,
+        },
+      }),
+
+      // 2. Soft delete folder
+      db.folder.update({
+        where: { id },
+        data: { isDeleted: true },
+      }),
+    ]);
 
     sendResponse(res, {
       status: 200,
