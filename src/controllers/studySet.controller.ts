@@ -3,6 +3,7 @@ import { MESSAGE_CODES } from '@/constants';
 import { StudySetItemWithProgress } from '@/type';
 import { sendResponse } from '@/utils';
 import { getNextReview } from '@/utils/handleTime';
+import { shuffle } from '@/utils/suffle';
 import { createStudySetSchema } from '@/validations';
 import { AccessLevel } from '@prisma/client';
 import { addDays } from 'date-fns';
@@ -321,6 +322,124 @@ export const getStudySetById = async (req: Request, res: Response) => {
   }
 };
 
+export const getStudySetForLearnQuiz = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const userId = req.user?.id;
+
+    if (!id) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.ID_REQUIRED,
+      });
+      return;
+    }
+
+    const user = await db.user.findUnique({
+      where: {
+        id: userId,
+      },
+    });
+
+    if (!user) {
+      sendResponse(res, {
+        status: 404,
+        success: false,
+        message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
+      });
+      return;
+    }
+
+    const studySet = await db.studySet.findUnique({
+      where: {
+        id,
+        isDeleted: false,
+      },
+      include: {
+        language: true,
+        folder: true,
+        items: {
+          where: {
+            isDeleted: false,
+          },
+          orderBy: {
+            position: 'asc',
+          },
+          include: {
+            progress: {
+              where: {
+                userId,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!studySet) {
+      sendResponse(res, {
+        status: 404,
+        success: false,
+        message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
+      });
+      return;
+    }
+
+    const allMeanings = await db.studySetItem.findMany({
+      where: {
+        studySetId: id,
+        isDeleted: false,
+      },
+      select: {
+        id: true,
+        meaning: true,
+      },
+    });
+
+    // 3️⃣ Build quiz dataset (ABCD)
+    const quizDataset = studySet.items.map((item) => {
+      const wrongAnswers = shuffle(allMeanings.filter((m) => m.id !== item.id))
+        .slice(0, 3)
+        .map((m) => m.meaning);
+
+      const options = shuffle([item.meaning, ...wrongAnswers]);
+
+      const labelArr = ['A', 'B', 'C', 'D'];
+
+      return {
+        itemId: item.id,
+        questionType: 'CHOICE',
+        question: `Nghĩa của từ "${item.word}" là gì?`,
+        options: options.map((text, index) => ({
+          id: labelArr[index],
+          text,
+        })),
+        correctAnswer: item.meaning,
+      };
+    });
+
+    // TRỘN THỨ TỰ CÂU HỎI
+    const shuffledQuizDataset = shuffle(quizDataset);
+
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      data: {
+        ...studySet,
+        items: shuffledQuizDataset,
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
+
 export const editStudySet = async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -610,6 +729,114 @@ export const submitStudySetItem = async (req: Request, res: Response) => {
         });
       }
     }
+
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      message_code: MESSAGE_CODES.SUCCESS.UPDATED_SUCCESS,
+    });
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
+
+export const submitManyStudySetItems = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+    const userId = req.user?.id;
+    const { answers } = req.body as {
+      answers: { itemId: string; isCorrect: boolean }[];
+    };
+
+    if (!id) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.ID_REQUIRED,
+      });
+      return;
+    }
+
+    if (answers.length === 0) {
+      sendResponse(res, {
+        status: 200,
+        success: true,
+        message_code: MESSAGE_CODES.SUCCESS.UPDATED_SUCCESS,
+      });
+
+      return;
+    }
+
+    // Lấy toàn bộ item + progress hiện tại
+    const items = await db.studySetItem.findMany({
+      where: {
+        id: { in: answers.map((a) => a.itemId) },
+        isDeleted: false,
+      },
+      include: {
+        progress: {
+          where: { userId },
+        },
+      },
+    });
+
+    const now = new Date();
+
+    const operations = items.map((item) => {
+      const answer = answers.find((a) => a.itemId === item.id);
+      if (!answer) return null;
+
+      const progress = item.progress[0];
+
+      // Lần đầu học
+      if (!progress) {
+        return db.userProgress.create({
+          data: {
+            userId,
+            itemId: item.id,
+            status: answer.isCorrect ? 'LEARNING' : 'NEW',
+            correctCount: answer.isCorrect ? 1 : 0,
+            wrongCount: answer.isCorrect ? 0 : 1,
+            lastStudiedAt: now,
+            nextReview: addDays(now, 1),
+          },
+        });
+      }
+
+      // Đã có progress
+      if (answer.isCorrect) {
+        const newCorrectCount = progress.correctCount + 1;
+
+        return db.userProgress.update({
+          where: { id: progress.id },
+          data: {
+            status: newCorrectCount >= 4 ? 'MASTERED' : 'LEARNING',
+            correctCount: newCorrectCount,
+            lastStudiedAt: now,
+            nextReview: getNextReview(newCorrectCount),
+          },
+        });
+      }
+
+      // Trả lời sai
+      return db.userProgress.update({
+        where: { id: progress.id },
+        data: {
+          status: 'LEARNING',
+          correctCount: 0,
+          wrongCount: progress.wrongCount + 1,
+          lastStudiedAt: now,
+          nextReview: addDays(now, 1),
+        },
+      });
+    });
+
+    await db.$transaction(operations as any);
 
     sendResponse(res, {
       status: 200,
