@@ -17,7 +17,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       sendResponse(res, {
         status: 401,
         success: false,
-        error_code: MESSAGE_CODES.AUTH.UNAUTHORIZED,
+        message_code: MESSAGE_CODES.AUTH.UNAUTHORIZED,
       });
       return;
     }
@@ -27,7 +27,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       sendResponse(res, {
         status: 401,
         success: false,
-        error_code: MESSAGE_CODES.AUTH.TOKEN_REQUIRED,
+        message_code: MESSAGE_CODES.AUTH.TOKEN_REQUIRED,
       });
       return;
     }
@@ -36,7 +36,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       sendResponse(res, {
         status: 500,
         success: false,
-        error_code: MESSAGE_CODES.AUTH.JWT_SECRET_NOT_SET,
+        message_code: MESSAGE_CODES.AUTH.JWT_SECRET_NOT_SET,
       });
       return;
     }
@@ -45,16 +45,20 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       sendResponse(res, {
         status: 410,
         success: false,
-        error_code: 'TOKEN_EXPIRED',
+        message_code: 'TOKEN_EXPIRED',
       });
+
+      return;
     }
 
     if (error === 'INVALID_TOKEN') {
       sendResponse(res, {
         status: 410,
         success: false,
-        error_code: 'TOKEN_EXPIRED',
+        message_code: 'TOKEN_EXPIRED',
       });
+
+      return;
     }
 
     req.user = decoded;
@@ -65,7 +69,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     sendResponse(res, {
       status: 401,
       success: false,
-      error_code: MESSAGE_CODES.AUTH.INVALID_TOKEN,
+      message_code: MESSAGE_CODES.AUTH.INVALID_TOKEN,
     });
   }
 };

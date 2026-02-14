@@ -36,209 +36,210 @@ enum QuestionType {
 // ================== MODELS ==================
 
 model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
-  password       String
-  userName       String
-  role           Role            @default(USER)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  resetPwToken   String?
+  id              String    @id @default(uuid())
+  email           String    @unique
+  password        String
+  userName        String
+  role            Role      @default(USER)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  resetPwToken    String?
   resetPwExpireAt DateTime?
 
-  folders        Folder[]
-  studySets      StudySet[]
+  folders         Folder[]
+  studySets       StudySet[]
   dailyActivities DailyActivity[]
-  progress       UserProgress[]
-  tests          Test[]
-  testResults    TestResult[]
-  refreshTokens  RefreshToken[]
+  progress        UserProgress[]
+  tests           Test[]
+  testResults     TestResult[]
+  refreshTokens   RefreshToken[]
 }
 
 model Folder {
-  id        String     @id @default(uuid())
-  userId    String
-  name      String
+  id          String   @id @default(uuid())
+  userId      String
+  name        String
   description String?
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  isDeleted Boolean     @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isDeleted   Boolean  @default(false)
 
-  user     User        @relation(fields: [userId], references: [id])
+  user      User       @relation(fields: [userId], references: [id])
   studySets StudySet[]
 }
 
 model StudySet {
-  id          String       @id @default(uuid())
+  id          String      @id @default(uuid())
   userId      String
   name        String
   description String?
   languageId  String
   folderId    String?
-  accessLevel AccessLevel  @default(PUBLIC)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  isDeleted   Boolean      @default(false)
+  accessLevel AccessLevel @default(PUBLIC)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  isDeleted   Boolean     @default(false)
 
-  user        User         @relation(fields: [userId], references: [id])
-  language    Language     @relation(fields: [languageId], references: [id])
-  folder      Folder?      @relation(fields: [folderId], references: [id])
-  items       StudySetItem[]
+  user     User           @relation(fields: [userId], references: [id])
+  language Language       @relation(fields: [languageId], references: [id])
+  folder   Folder?        @relation(fields: [folderId], references: [id])
+  items    StudySetItem[]
 }
 
 model Language {
-  id          String       @id @default(uuid())
-  name        String
-  code        String
+  id   String @id @default(uuid())
+  name String
+  code String
 
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  studySets   StudySet[]
+  studySets StudySet[]
 }
 
 model StudySetItem {
-  id         String       @id @default(uuid())
+  id         String   @id @default(uuid())
   studySetId String
   word       String
   meaning    String
   note       String?
   position   Int
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  isDeleted   Boolean      @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  isDeleted  Boolean  @default(false)
 
-  studySet   StudySet     @relation(fields: [studySetId], references: [id])
-  progress   UserProgress[]
+  studySet StudySet       @relation(fields: [studySetId], references: [id])
+  progress UserProgress[]
 }
 
 model UserProgress {
-  id           String     @id @default(uuid())
-  userId       String
-  itemId       String
-  status       Status      @default(NEW)
-  nextReview   DateTime?
-  correctCount Int         @default(0)
-  wrongCount   Int         @default(0)
+  id            String    @id @default(uuid())
+  userId        String
+  itemId        String
+  status        Status    @default(NEW)
+  nextReview    DateTime?
+  correctCount  Int       @default(0)
+  wrongCount    Int       @default(0)
   lastStudiedAt DateTime
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  user         User        @relation(fields: [userId], references: [id])
-  item         StudySetItem @relation(fields: [itemId], references: [id])
+  user User         @relation(fields: [userId], references: [id])
+  item StudySetItem @relation(fields: [itemId], references: [id])
 }
 
 model DailyActivity {
-  id           String    @id @default(uuid())
-  userId       String
-  date         DateTime
-  learnedWords Int
+  id            String   @id @default(uuid())
+  userId        String
+  date          DateTime
+  learnedWords  Int
   reviewedWords Int
 
-  user         User      @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 model Test {
-  id          String        @id @default(uuid())
+  id          String      @id @default(uuid())
   userId      String
   title       String
   description String?
   duration    Int?
   accessLevel AccessLevel
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  isDeleted   Boolean        @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  isLocked    Boolean     @default(false)
+  isDeleted   Boolean     @default(false)
 
-  user        User          @relation(fields: [userId], references: [id])
-  questions   TestQuestion[]
-  results     TestResult[]
+  user      User           @relation(fields: [userId], references: [id])
+  questions TestQuestion[]
+  results   TestResult[]
 }
 
 model TestQuestion {
-  id           String        @id @default(uuid())
+  id           String       @id @default(uuid())
   testId       String
-  questionType QuestionType  @default(CHOICE)
+  questionType QuestionType @default(CHOICE)
   questionText String
-  position     Int            @default(0)
-  points       Int            @default(0)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  position     Int          @default(0)
+  points       Int          @default(0)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
-  test         Test           @relation(fields: [testId], references: [id])
-  options      Option[]
-  fillAnswers  FillAnswer[]
+  test          Test               @relation(fields: [testId], references: [id])
+  options       Option[]
+  fillAnswers   FillAnswer[]
   resultDetails TestResultDetail[]
 }
 
 model Option {
-  id         String       @id @default(uuid())
+  id         String   @id @default(uuid())
   questionId String
   label      String
   text       String
-  isCorrect  Boolean       @default(false)
-  position   Int           @default(0)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  isCorrect  Boolean  @default(false)
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  question   TestQuestion  @relation(fields: [questionId], references: [id])
+  question        TestQuestion                      @relation(fields: [questionId], references: [id])
   selectedOptions TestResultDetailsSelectedOption[]
 }
 
 model FillAnswer {
-  id         String       @id @default(uuid())
+  id         String   @id @default(uuid())
   questionId String
   answerText String
-  createdAt  DateTime     @default(now())
+  createdAt  DateTime @default(now())
 
-  question   TestQuestion @relation(fields: [questionId], references: [id])
+  question TestQuestion @relation(fields: [questionId], references: [id])
 }
 
 model TestResult {
-  id            String     @id @default(uuid())
-  testId        String
-  userId        String
-  score         Int
+  id             String   @id @default(uuid())
+  testId         String
+  userId         String
+  score          Int
   correctAnswers Int
   totalQuestions Int
-  startedAt     DateTime
-  finishedAt    DateTime
-  createdAt     DateTime    @default(now())
+  startedAt      DateTime
+  finishedAt     DateTime
+  createdAt      DateTime @default(now())
 
-  test          Test        @relation(fields: [testId], references: [id])
-  user          User        @relation(fields: [userId], references: [id])
-  details       TestResultDetail[]
+  test    Test               @relation(fields: [testId], references: [id])
+  user    User               @relation(fields: [userId], references: [id])
+  details TestResultDetail[]
 }
 
 model TestResultDetail {
-  id          String    @id @default(uuid())
-  resultId    String
-  questionId  String
+  id            String  @id @default(uuid())
+  resultId      String
+  questionId    String
   studentAnswer String?
-  isCorrect   Boolean
+  isCorrect     Boolean
 
-  result      TestResult    @relation(fields: [resultId], references: [id])
-  question    TestQuestion   @relation(fields: [questionId], references: [id])
+  result          TestResult                        @relation(fields: [resultId], references: [id])
+  question        TestQuestion                      @relation(fields: [questionId], references: [id])
   selectedOptions TestResultDetailsSelectedOption[]
 }
 
 model TestResultDetailsSelectedOption {
-  id                  String     @id @default(uuid())
-  testResultDetailId  String
-  optionId            String
+  id                 String @id @default(uuid())
+  testResultDetailId String
+  optionId           String
 
   testResultDetail TestResultDetail @relation(fields: [testResultDetailId], references: [id])
   option           Option           @relation(fields: [optionId], references: [id])
 }
 
 model RefreshToken {
-  id         String      @id @default(uuid())
-  token      String
-  userId     String
-  userAgent  String
-  ipAddress  String
-  isRevoked  Boolean     @default(false)
-  expiresAt  DateTime
-  createdAt  DateTime    @default(now())
+  id        String   @id @default(uuid())
+  token     String
+  userId    String
+  userAgent String
+  ipAddress String
+  isRevoked Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
-  user       User        @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
