@@ -1,5 +1,6 @@
 import cookieParser from 'cookie-parser';
 import express from 'express';
+import { Server } from 'socket.io';
 import authRouter from './routes/auth.router';
 import userSearchRouter from './routes/search.router';
 import folderRouter from './routes/folder.router';
