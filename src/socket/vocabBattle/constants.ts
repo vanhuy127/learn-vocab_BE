@@ -1,2 +1,0 @@
-export const QUESTION_TIME_LIMIT_SECONDS = 30;
-export const DEFAULT_QUESTIONS_PER_MATCH = Number(process.env.BATTLE_QUESTION_COUNT || 10);
