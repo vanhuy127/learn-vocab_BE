@@ -34,10 +34,10 @@ enum QuestionType {
 }
 
 enum VocabularyBattleMatchStatus {
-  WAITING
-  IN_PROGRESS
-  FINISHED
-  CANCELLED
+  WAITING // đang đợi
+  IN_PROGRESS // đang diễn ra
+  FINISHED // đã kết thúc
+  CANCELLED // đã hủy
 }
 
 // ================== MODELS ==================

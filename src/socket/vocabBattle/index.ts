@@ -1,174 +1,125 @@
-import { VocabularyBattleMatchStatus } from '@prisma/client';
 import { Server } from 'socket.io';
-import { authenticateSocket, getSocketUser } from './auth';
-import { roomBySocketId, rooms, removePlayerFromQueue, userQueueIndex, waitingQueue } from './state';
-import { BattleAnswerPayload } from './types';
-import { finishMatch, goToNextQuestion, saveBattleAnswer, tryMatchPlayers } from './match.service';
-import { sanitizeSelectedOption, toLeaderboard } from './utils';
+import http from 'http';
+import express from 'express';
+import { socketMiddleware } from '@/middlewares/socket';
+import { roomBySocketId, waitingQueue } from './vocabBattle.state';
+import { handleAnswer, tryMatchPlayers } from './vocabBattle.service';
+import { leaveMatch, rejoinMatch, scheduleMatchLeave } from './vocabBattle.utils';
 
-export const registerVocabularyBattleSocket = (io: Server) => {
-  io.use(authenticateSocket);
+const app = express();
+const server = http.createServer(app);
 
-  io.on('connection', (socket) => {
-    const connectedUser = getSocketUser(socket);
-    if (!connectedUser) {
-      socket.disconnect();
+const io = new Server(server, {
+  cors: {
+    origin: process.env.FRONT_END_URL,
+    credentials: true,
+  },
+});
+
+io.use(socketMiddleware);
+
+io.on('connection', (socket) => {
+  const user = socket.user;
+
+  socket.emit('battle:ready');
+
+  if (user) {
+    rejoinMatch(io, socket, user.id);
+  }
+
+  //nhận sự kiện tham gia tìm trận đấu từ client
+  socket.on('battle:queue:join', async () => {
+    if (!user) {
+      socket.emit('battle:error', { message: 'UNAUTHORIZED' });
       return;
     }
 
-    socket.emit('battle:ready', {
-      userId: connectedUser.id,
+    //kiểm tra đang ở trong hàng đợi hay trong trận đấu nào chưa
+    const isAlreadyQueued = waitingQueue.some((player) => player.userId === user.id || player.socketId === socket.id);
+
+    if (isAlreadyQueued) {
+      socket.emit('battle:error', { message: 'ALREADY_IN_QUEUE' });
+      return;
+    }
+
+    if (roomBySocketId.has(socket.id)) {
+      socket.emit('battle:error', { message: 'ALREADY_IN_MATCH' });
+      return;
+    }
+
+    waitingQueue.push({
+      userId: user.id,
+      socketId: socket.id,
+      userName: user?.name || 'Player',
     });
 
-    socket.on('battle:queue:join', async () => {
-      const user = getSocketUser(socket);
-      if (!user) {
-        socket.emit('battle:error', { message: 'UNAUTHORIZED' });
-        return;
-      }
+    console.log('waiting queue', waitingQueue);
 
-      const existingRoom = roomBySocketId.get(socket.id);
-      if (existingRoom) {
-        socket.emit('battle:error', {
-          message: 'You are already in an active match.',
-        });
-        return;
-      }
+    socket.emit('battle:queue:joined');
 
-      removePlayerFromQueue(user.id);
-
-      waitingQueue.push({
-        userId: user.id,
-        userName: user.userName || user.email || 'Player',
-        socketId: socket.id,
-        joinedAt: Date.now(),
-      });
-      userQueueIndex.set(user.id, socket.id);
-
-      socket.emit('battle:queue:joined', {
-        queuedAt: new Date().toISOString(),
-      });
-
-      await tryMatchPlayers(io);
-    });
-
-    socket.on('battle:queue:leave', () => {
-      const user = getSocketUser(socket);
-      if (!user) {
-        return;
-      }
-
-      removePlayerFromQueue(user.id);
-      socket.emit('battle:queue:left', {
-        leftAt: new Date().toISOString(),
-      });
-    });
-
-    socket.on('battle:answer', async (payload: BattleAnswerPayload) => {
-      const user = getSocketUser(socket);
-      if (!user) {
-        socket.emit('battle:error', { message: 'UNAUTHORIZED' });
-        return;
-      }
-
-      const roomId = roomBySocketId.get(socket.id);
-      if (!roomId || roomId !== payload.roomId) {
-        socket.emit('battle:error', { message: 'Invalid room.' });
-        return;
-      }
-
-      const room = rooms.get(roomId);
-      if (!room || room.status !== VocabularyBattleMatchStatus.IN_PROGRESS) {
-        socket.emit('battle:error', { message: 'Match has ended.' });
-        return;
-      }
-
-      const currentQuestion = room.questions[room.currentQuestionIndex];
-      if (!currentQuestion || currentQuestion.id !== payload.questionId) {
-        socket.emit('battle:error', { message: 'Invalid question.' });
-        return;
-      }
-
-      if (room.answeredByCurrentQuestion.has(user.id)) {
-        socket.emit('battle:error', { message: 'You already answered this question.' });
-        return;
-      }
-
-      const selectedOption = sanitizeSelectedOption(payload.selectedOption);
-      if (!['A', 'B', 'C', 'D'].includes(selectedOption)) {
-        socket.emit('battle:error', { message: 'Invalid option.' });
-        return;
-      }
-
-      const isCorrect = selectedOption === currentQuestion.correctOption;
-      const scoreDelta = isCorrect ? 1 : 0;
-
-      room.scores[user.id] = (room.scores[user.id] ?? 0) + scoreDelta;
-      room.answeredByCurrentQuestion.add(user.id);
-
-      const saveError = await saveBattleAnswer(
-        room,
-        currentQuestion.id,
-        user.id,
-        selectedOption,
-        isCorrect,
-        scoreDelta,
-      );
-      if (saveError) {
-        socket.emit('battle:error', { message: saveError });
-        return;
-      }
-
-      socket.emit('battle:answer:result', {
-        questionId: currentQuestion.id,
-        selectedOption,
-        isCorrect,
-        scoreDelta,
-        score: room.scores[user.id] ?? 0,
-      });
-
-      io.to(roomId).emit('battle:score:update', {
-        roomId,
-        leaderboard: toLeaderboard(room),
-      });
-
-      if (isCorrect) {
-        await goToNextQuestion(io, room);
-        return;
-      }
-
-      if (room.answeredByCurrentQuestion.size >= room.players.length) {
-        await goToNextQuestion(io, room);
-      }
-    });
-
-    socket.on('disconnect', async () => {
-      const user = getSocketUser(socket);
-      if (!user) {
-        return;
-      }
-
-      removePlayerFromQueue(user.id);
-
-      const roomId = roomBySocketId.get(socket.id);
-      if (!roomId) {
-        return;
-      }
-
-      const room = rooms.get(roomId);
-      if (!room || room.status !== VocabularyBattleMatchStatus.IN_PROGRESS) {
-        return;
-      }
-
-      const opponent = room.players.find((player) => player.socketId !== socket.id);
-      if (opponent) {
-        io.to(opponent.socketId).emit('battle:opponent:left', {
-          roomId,
-          message: 'Opponent left the match.',
-        });
-      }
-
-      await finishMatch(io, room, VocabularyBattleMatchStatus.CANCELLED, opponent?.userId);
-    });
+    await tryMatchPlayers(io, socket);
   });
-};
+
+  socket.on('battle:queue:leave', () => {
+    if (!user) {
+      socket.emit('battle:error', { message: 'UNAUTHORIZED' });
+      return;
+    }
+
+    leaveMatch(io, socket.id, user.id)
+      .then(() => {
+        socket.emit('battle:queue:left');
+      })
+      .catch((error) => {
+        console.error('battle:queue:leave error:', error);
+        socket.emit('battle:error', { message: 'LEAVE_MATCH_FAILED' });
+      });
+  });
+
+  socket.on('battle:answer', async (payload) => {
+    const roomId = roomBySocketId.get(socket.id);
+    if (!roomId) {
+      socket.emit('battle:error', { message: 'NOT_IN_MATCH' });
+      return;
+    }
+    if (!user) {
+      socket.emit('battle:error', { message: 'UNAUTHORIZED' });
+      return;
+    }
+
+    await handleAnswer(io, socket, roomId, user.id, payload);
+  });
+
+  socket.on('disconnect', async () => {
+    console.log('socket disconnected: ', socket.id);
+
+    if (!user) {
+      return;
+    }
+
+    scheduleMatchLeave(io, socket.id, user.id);
+  });
+});
+
+export { io, app, server };
+// Client → Server
+// 'battle:queue:join'
+// 'battle:queue:leave'
+// 'battle:answer'
+
+// Server → Client
+// 'battle:ready'
+// 'battle:queue:joined'
+// 'battle:queue:left'
+
+// 'battle:match:found'
+// 'battle:start'
+
+// 'battle:question'
+// 'battle:answer:result'
+// 'battle:score:update'
+
+// 'battle:next-question'
+// 'battle:match:finished'
+
+// 'battle:error'
