@@ -10,9 +10,68 @@ import {
   MAIL_OPTIONS,
 } from '@/utils';
 import { MESSAGE_CODES } from '@/constants';
-import { changePasswordSchema, forgotPasswordSchema, loginSchema } from '@/validations';
+import { changePasswordSchema, forgotPasswordSchema, loginSchema, registerSchema } from '@/validations';
 import { addMinutes } from 'date-fns';
 import crypto from 'crypto';
+
+export const register = async (req: Request, res: Response) => {
+  try {
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.VALIDATION_ERROR,
+        messages: parsed.error.errors.map((err) => ({
+          field: err.path.join('.'),
+          error_code: err.message,
+        })),
+      });
+
+      return;
+    }
+
+    const { email, password, userName } = parsed.data;
+    const normalizedEmail = email.trim();
+
+    const existingUser = await db.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (existingUser) {
+      sendResponse(res, {
+        status: 409,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.EMAIL_ALREADY_EXISTS,
+      });
+
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await db.user.create({
+      data: {
+        email: normalizedEmail,
+        password: hashedPassword,
+        userName: userName.trim(),
+      },
+    });
+
+    sendResponse(res, {
+      status: 201,
+      success: true,
+      message_code: MESSAGE_CODES.SUCCESS.CREATED_SUCCESS,
+    });
+  } catch (error) {
+    console.error('Error during user registration:', error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
 
 export const login = async (req: Request, res: Response) => {
   try {

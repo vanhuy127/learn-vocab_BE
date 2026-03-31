@@ -1,4 +1,5 @@
 import {
+  register,
   login,
   refreshAccessToken,
   changePassword,
@@ -11,6 +12,8 @@ import { authenticate } from '@/middlewares/authenticate';
 import express from 'express';
 
 const authRouter = express.Router();
+
+authRouter.post('/auth/register', register);
 
 authRouter.post('/auth/login', login);
 
