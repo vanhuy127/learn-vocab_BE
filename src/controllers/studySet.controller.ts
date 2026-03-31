@@ -1,13 +1,42 @@
 import db from '@/config/prisma.config';
-import { MESSAGE_CODES } from '@/constants';
+import { DEFAULT_PAGE, DEFAULT_SIZE, MESSAGE_CODES } from '@/constants';
 import { StudySetItemWithProgress } from '@/type';
-import { sendResponse } from '@/utils';
+import { calculationSkip, getStudySets, sendResponse } from '@/utils';
 import { getNextReview } from '@/utils/handleTime';
 import { shuffle } from '@/utils/suffle';
 import { createStudySetSchema } from '@/validations';
 import { AccessLevel } from '@prisma/client';
 import { addDays } from 'date-fns';
 import { Request, Response } from 'express';
+
+export const getStudySet = async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
+    const size = parseInt(req.query.size as string) || DEFAULT_SIZE;
+    const skip = calculationSkip(page, size);
+    const search = (req.query.search as string)?.trim().toLowerCase() || '';
+
+    const studySet = await getStudySets(skip, size, search);
+
+    const { items, pagination } = studySet;
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      data: {
+        data: studySet.items,
+        pagination,
+      },
+      message_code: MESSAGE_CODES.SUCCESS.GET_ALL_SUCCESS,
+    });
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
 
 export const getStudySetCurrent = async (req: Request, res: Response) => {
   try {

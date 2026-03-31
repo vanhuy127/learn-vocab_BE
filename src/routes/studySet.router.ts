@@ -2,6 +2,7 @@ import {
   createStudySet,
   deleteStudySet,
   editStudySet,
+  getStudySet,
   getStudySetById,
   getStudySetCurrent,
   getStudySetForLearnQuiz,
@@ -12,6 +13,8 @@ import { authenticate } from '@/middlewares/authenticate';
 import express from 'express';
 
 const studySetRouter = express.Router();
+
+studySetRouter.get('/study-set', getStudySet);
 
 studySetRouter.post('/study-set', authenticate, createStudySet);
 
