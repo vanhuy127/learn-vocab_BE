@@ -7,6 +7,7 @@ import {
   getMe,
   sendEmailForgotPassword,
   checkTokenAvailable,
+  logout,
 } from '@/controllers/auth.controller';
 import { authenticate } from '@/middlewares/authenticate';
 import express from 'express';
@@ -17,7 +18,7 @@ authRouter.post('/auth/register', register);
 
 authRouter.post('/auth/login', login);
 
-// authRouter.get('/auth/logout', authenticate, logout);
+authRouter.get('/auth/logout', authenticate, logout);
 
 authRouter.get('/auth/me', authenticate, getMe);
 
