@@ -4,10 +4,10 @@ import bcrypt from 'bcrypt';
 import {
   generateAccessToken,
   generateRefreshToken,
-  verifyRefreshToken,
   sendResponse,
   sendEmail,
   MAIL_OPTIONS,
+  REFRESH_TOKEN_EXPIRY,
 } from '@/utils';
 import { MESSAGE_CODES } from '@/constants';
 import { changePasswordSchema, forgotPasswordSchema, loginSchema, registerSchema } from '@/validations';
@@ -113,29 +113,31 @@ export const login = async (req: Request, res: Response) => {
       role: user.role,
     });
 
-    const refreshToken = generateRefreshToken({
-      id: user.id,
-      email: user.email,
-      userName: user.userName,
-      role: user.role,
+    const refreshToken = generateRefreshToken();
+
+    await db.refreshToken.create({
+      data: {
+        userId: user.id,
+        token: refreshToken,
+        userAgent: req.headers['user-agent'] || 'unknown',
+        ipAddress: req.ip || 'unknown',
+        expiresAt: new Date(Date.now() + REFRESH_TOKEN_EXPIRY), // 7 ngày
+      },
     });
 
-    // await db.refreshToken.create({
-    //   data: {
-    //     userId: user.id,
-    //     token: refreshToken,
-    //     userAgent: req.headers['user-agent'] || 'unknown',
-    //     ipAddress: req.ip || 'unknown',
-    //     expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 7), // 7 ngày
-    //   },
-    // });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: REFRESH_TOKEN_EXPIRY,
+    });
 
-    const resData = { id: user.id, email: user.email, role: user.role, userName: user.userName };
+    const resData = { id: user.id, email: user.email, role: user.role, userName: user.userName, accessToken };
 
     sendResponse(res, {
       status: 200,
       success: true,
-      data: { ...resData, accessToken, refreshToken },
+      data: resData,
       message_code: MESSAGE_CODES.SUCCESS.LOGIN_SUCCESS,
     });
   } catch (error) {
@@ -152,7 +154,8 @@ export const login = async (req: Request, res: Response) => {
 
 export const refreshAccessToken = async (req: Request, res: Response) => {
   try {
-    const token = req.body.refreshToken;
+    const token = req.cookies.refreshToken;
+
     if (!token) {
       sendResponse(res, {
         status: 401,
@@ -163,76 +166,37 @@ export const refreshAccessToken = async (req: Request, res: Response) => {
       return;
     }
 
-    const { decoded, error } = verifyRefreshToken(token);
+    const rf = await db.refreshToken.findUnique({
+      where: { token },
+      include: { user: true },
+    });
 
-    if (error) {
-      const errorCode =
-        error === 'TOKEN_EXPIRED' ? MESSAGE_CODES.AUTH.REFRESH_TOKEN_EXPIRED : MESSAGE_CODES.AUTH.INVALID_REFRESH_TOKEN;
+    if (!rf) {
+      sendResponse(res, {
+        status: 401,
+        success: false,
+        message_code: MESSAGE_CODES.AUTH.INVALID_REFRESH_TOKEN,
+      });
+      return;
+    }
 
-      // if (error === 'TOKEN_EXPIRED') {
-      //   await db.refreshToken.updateMany({
-      //     where: {
-      //       token,
-      //       isRevoked: false,
-      //     },
-      //     data: {
-      //       isRevoked: true,
-      //     },
-      //   });
-      // }
+    // Kiểm tra nếu token đã hết hạn
+    if (rf.expiresAt < new Date()) {
+      await db.refreshToken.delete({ where: { token } });
 
       sendResponse(res, {
         status: 401,
         success: false,
-        message_code: errorCode,
+        message_code: MESSAGE_CODES.AUTH.REFRESH_TOKEN_EXPIRED,
       });
-
       return;
     }
-
-    if (!decoded || !decoded.id || !decoded.email || !decoded.role) {
-      sendResponse(res, {
-        status: 400,
-        success: false,
-        message_code: MESSAGE_CODES.AUTH.INVALID_TOKEN,
-      });
-
-      return;
-    }
-
-    // const storedToken = await db.refreshToken.findFirst({
-    //   where: {
-    //     token,
-    //     userId: decoded.id,
-    //     isRevoked: false,
-    //   },
-    // });
-
-    // if (!storedToken) {
-    //   // Revoke tất cả refresh token của user (nghi ngờ token bị đánh cắp)
-    //   await db.refreshToken.updateMany({
-    //     where: {
-    //       userId: decoded.id,
-    //       isRevoked: false,
-    //     },
-    //     data: {
-    //       isRevoked: true,
-    //     },
-    //   });
-
-    //   sendResponse(res, {
-    //     status: 401,
-    //     success: false,
-    //     message_code: MESSAGE_CODES.AUTH.INVALID_REFRESH_TOKEN,
-    //   });
-    //   return;
-    // }
 
     const newAccessToken = generateAccessToken({
-      id: decoded.id,
-      email: decoded.email,
-      userName: decoded.userName,
-      role: decoded.role,
+      id: rf.user.id,
+      email: rf.user.email,
+      userName: rf.user.userName,
+      role: rf.user.role,
     });
 
     sendResponse(res, {
@@ -359,63 +323,42 @@ export const changePassword = async (req: Request, res: Response) => {
   }
 };
 
-// export const logout = async (req: Request, res: Response) => {
-//   try {
-//     const token = req.body.refreshToken;
-//     const { id } = req.user;
+export const logout = async (req: Request, res: Response) => {
+  try {
+    const token = req.cookies.refreshToken;
 
-//     if (!token) {
-//       sendResponse(res, {
-//         status: 400,
-//         success: false,
-//         message_code: MESSAGE_CODES.AUTH.REFRESH_TOKEN_MISSING,
-//       });
+    if (!token) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.AUTH.REFRESH_TOKEN_MISSING,
+      });
 
-//       return;
-//     }
+      return;
+    }
 
-//     const storedToken = await db.refreshToken.findFirst({
-//       where: {
-//         token,
-//         userId: id,
-//         isRevoked: false,
-//       },
-//     });
+    await db.refreshToken.delete({
+      where: {
+        token,
+      },
+    });
 
-//     if (!storedToken) {
-//       // Token không tồn tại hoặc đã bị revoke rồi
-//       // Vẫn trả về success để tránh leak thông tin
-//       sendResponse(res, {
-//         status: 200,
-//         success: true,
-//         message_code: MESSAGE_CODES.SUCCESS.LOGOUT_SUCCESS,
-//       });
-//       return;
-//     }
+    res.clearCookie('refreshToken');
 
-//     await db.refreshToken.update({
-//       where: {
-//         id: storedToken.id,
-//       },
-//       data: {
-//         isRevoked: true,
-//       },
-//     });
-
-//     sendResponse(res, {
-//       status: 200,
-//       success: true,
-//       message_code: MESSAGE_CODES.SUCCESS.LOGOUT_SUCCESS,
-//     });
-//   } catch (error) {
-//     console.error('Error during logout:', error);
-//     sendResponse(res, {
-//       status: 500,
-//       success: false,
-//       message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
-//     });
-//   }
-// };
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      message_code: MESSAGE_CODES.SUCCESS.LOGOUT_SUCCESS,
+    });
+  } catch (error) {
+    console.error('Error during logout:', error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
 
 export const sendEmailForgotPassword = async (req: Request, res: Response) => {
   try {

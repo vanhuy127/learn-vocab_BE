@@ -53,15 +53,15 @@ model User {
   resetPwToken    String?
   resetPwExpireAt DateTime?
 
-  folders         Folder[]
-  studySets       StudySet[]
-  dailyActivities DailyActivity[]
-  progress        UserProgress[]
-  tests           Test[]
-  testResults     TestResult[]
-  refreshTokens   RefreshToken[]
-  vocabBattles    VocabularyBattlePlayer[]
-  wonVocabBattles VocabularyBattleMatch[] @relation("BattleWinner")
+  folders            Folder[]
+  studySets          StudySet[]
+  dailyActivities    DailyActivity[]
+  progress           UserProgress[]
+  tests              Test[]
+  testResults        TestResult[]
+  refreshTokens      RefreshToken[]
+  vocabBattles       VocabularyBattlePlayer[]
+  wonVocabBattles    VocabularyBattleMatch[]  @relation("BattleWinner")
   vocabBattleAnswers VocabularyBattleAnswer[]
 }
 
@@ -118,8 +118,8 @@ model StudySetItem {
   updatedAt  DateTime @updatedAt
   isDeleted  Boolean  @default(false)
 
-  studySet StudySet       @relation(fields: [studySetId], references: [id])
-  progress UserProgress[]
+  studySet        StudySet                   @relation(fields: [studySetId], references: [id])
+  progress        UserProgress[]
   battleQuestions VocabularyBattleQuestion[]
 }
 
@@ -244,11 +244,10 @@ model TestResultDetailsSelectedOption {
 
 model RefreshToken {
   id        String   @id @default(uuid())
-  token     String
+  token     String   @unique
   userId    String
   userAgent String
   ipAddress String
-  isRevoked Boolean  @default(false)
   expiresAt DateTime
   createdAt DateTime @default(now())
 
@@ -256,68 +255,68 @@ model RefreshToken {
 }
 
 model VocabularyBattleMatch {
-  id        String                    @id @default(uuid())
+  id        String                      @id @default(uuid())
   status    VocabularyBattleMatchStatus @default(WAITING)
   winnerId  String?
   startedAt DateTime?
   endedAt   DateTime?
-  createdAt DateTime                  @default(now())
-  updatedAt DateTime                  @updatedAt
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
 
-  winner    User?                     @relation("BattleWinner", fields: [winnerId], references: [id])
+  winner    User?                      @relation("BattleWinner", fields: [winnerId], references: [id])
   players   VocabularyBattlePlayer[]
   questions VocabularyBattleQuestion[]
   answers   VocabularyBattleAnswer[]
 }
 
 model VocabularyBattlePlayer {
-  id        String               @id @default(uuid())
-  matchId   String
-  userId    String
-  score     Int                  @default(0)
-  isWinner  Boolean              @default(false)
-  joinedAt  DateTime             @default(now())
-  leftAt    DateTime?
+  id       String    @id @default(uuid())
+  matchId  String
+  userId   String
+  score    Int       @default(0)
+  isWinner Boolean   @default(false)
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
 
-  match     VocabularyBattleMatch @relation(fields: [matchId], references: [id])
-  user      User                 @relation(fields: [userId], references: [id])
+  match VocabularyBattleMatch @relation(fields: [matchId], references: [id])
+  user  User                  @relation(fields: [userId], references: [id])
 
   @@unique([matchId, userId])
 }
 
 model VocabularyBattleQuestion {
-  id            String               @id @default(uuid())
-  matchId       String
+  id             String   @id @default(uuid())
+  matchId        String
   studySetItemId String
-  questionText  String
-  optionA       String
-  optionB       String
-  optionC       String
-  optionD       String
-  correctOption String
-  position      Int
-  createdAt     DateTime             @default(now())
+  questionText   String
+  optionA        String
+  optionB        String
+  optionC        String
+  optionD        String
+  correctOption  String
+  position       Int
+  createdAt      DateTime @default(now())
 
-  match         VocabularyBattleMatch @relation(fields: [matchId], references: [id])
-  studySetItem  StudySetItem         @relation(fields: [studySetItemId], references: [id])
-  answers       VocabularyBattleAnswer[]
+  match        VocabularyBattleMatch    @relation(fields: [matchId], references: [id])
+  studySetItem StudySetItem             @relation(fields: [studySetItemId], references: [id])
+  answers      VocabularyBattleAnswer[]
 
   @@unique([matchId, position])
 }
 
 model VocabularyBattleAnswer {
-  id            String               @id @default(uuid())
-  matchId       String
-  questionId    String
-  userId        String
+  id             String   @id @default(uuid())
+  matchId        String
+  questionId     String
+  userId         String
   selectedOption String
-  isCorrect     Boolean
-  scoreDelta    Int
-  answeredAt    DateTime             @default(now())
+  isCorrect      Boolean
+  scoreDelta     Int
+  answeredAt     DateTime @default(now())
 
-  match         VocabularyBattleMatch @relation(fields: [matchId], references: [id])
-  question      VocabularyBattleQuestion @relation(fields: [questionId], references: [id])
-  user          User                 @relation(fields: [userId], references: [id])
+  match    VocabularyBattleMatch    @relation(fields: [matchId], references: [id])
+  question VocabularyBattleQuestion @relation(fields: [questionId], references: [id])
+  user     User                     @relation(fields: [userId], references: [id])
 
   @@unique([questionId, userId])
 }
