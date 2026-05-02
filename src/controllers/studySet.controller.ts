@@ -1,13 +1,99 @@
 import db from '@/config/prisma.config';
 import { DEFAULT_PAGE, DEFAULT_SIZE, MESSAGE_CODES } from '@/constants';
 import { StudySetItemWithProgress } from '@/type';
-import { calculationSkip, getStudySets, sendResponse } from '@/utils';
-import { getNextReview } from '@/utils/handleTime';
-import { shuffle } from '@/utils/suffle';
+import {
+  getNextReview,
+  shuffle,
+  calculationSkip,
+  calculationTotalPages,
+  getStudySets,
+  sendListResponse,
+  sendResponse,
+} from '@/utils';
 import { createStudySetSchema } from '@/validations';
 import { AccessLevel } from '@prisma/client';
 import { addDays } from 'date-fns';
 import { Request, Response } from 'express';
+
+export const getAdminStudySet = async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || DEFAULT_PAGE;
+    const size = parseInt(req.query.size as string) || DEFAULT_SIZE;
+    const skip = calculationSkip(page, size);
+    const search = (req.query.search as string)?.trim().toLowerCase() || '';
+
+    const whereClause: any = {
+      ...(search && {
+        OR: [
+          { name: { contains: search } },
+          { language: { name: { contains: search } } },
+          { user: { email: { contains: search } } },
+        ],
+      }),
+      isDeleted: false,
+    };
+
+    const [studySets, total] = await Promise.all([
+      db.studySet.findMany({
+        where: whereClause,
+        skip,
+        take: size,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          accessLevel: true,
+          createdAt: true,
+          updatedAt: true,
+          language: {
+            select: {
+              id: true,
+              name: true,
+              code: true,
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              email: true,
+              userName: true,
+            },
+          },
+          _count: {
+            select: {
+              items: true,
+            },
+          },
+        },
+      }),
+      db.studySet.count({ where: whereClause }),
+    ]);
+
+    const totalPages = calculationTotalPages(total, size);
+
+    sendListResponse(res, {
+      status: 200,
+      success: true,
+      data: studySets,
+      pagination: {
+        total,
+        page,
+        size,
+        totalPages,
+      },
+      message_code: MESSAGE_CODES.SUCCESS.GET_ALL_SUCCESS,
+    });
+    return;
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
 
 export const getStudySet = async (req: Request, res: Response) => {
   try {
@@ -226,6 +312,7 @@ export const createStudySet = async (req: Request, res: Response) => {
     });
   }
 };
+
 export const getStudySetById = async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
@@ -871,6 +958,248 @@ export const submitManyStudySetItems = async (req: Request, res: Response) => {
       status: 200,
       success: true,
       message_code: MESSAGE_CODES.SUCCESS.UPDATED_SUCCESS,
+    });
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
+
+export const getAdminStudySetById = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+
+    if (!id) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.ID_REQUIRED,
+      });
+      return;
+    }
+
+    const studySet = await db.studySet.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        accessLevel: true,
+        createdAt: true,
+        updatedAt: true,
+        isDeleted: true,
+        language: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+          },
+        },
+        folder: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        user: {
+          select: {
+            id: true,
+            email: true,
+            userName: true,
+          },
+        },
+        items: true,
+      },
+    });
+
+    if (!studySet) {
+      sendResponse(res, {
+        status: 404,
+        success: false,
+        message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
+      });
+      return;
+    }
+
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      data: studySet,
+      message_code: MESSAGE_CODES.SUCCESS.GET_SUCCESS,
+    });
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
+
+export const statisticsStudySetById = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+
+    if (!id) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.ID_REQUIRED,
+      });
+      return;
+    }
+
+    // ===== 1. total items =====
+    const totalItemsPromise = db.studySetItem.count({
+      where: {
+        studySetId: id,
+        isDeleted: false,
+      },
+    });
+
+    // ===== 2. total users =====
+    const totalUsersPromise = db.$queryRaw<{ total: number }[]>`
+      SELECT COUNT(DISTINCT up.userId) as total
+      FROM UserProgress up
+      JOIN StudySetItem si ON si.id = up.itemId
+      WHERE si.studySetId = ${id}
+        AND si.isDeleted = false
+    `;
+
+    // ===== 3. status distribution =====
+    const statusPromise = db.userProgress.groupBy({
+      by: ['status'],
+      where: {
+        item: { studySetId: id },
+      },
+      _count: { status: true },
+    });
+
+    // ===== 4. accuracy + attempts =====
+    const accuracyPromise = db.userProgress.aggregate({
+      where: {
+        item: { studySetId: id },
+      },
+      _sum: {
+        correctCount: true,
+        wrongCount: true,
+      },
+    });
+
+    // ===== 5. completion =====
+    const completionPromise = db.$queryRaw<{ userId: string; masteredCount: number }[]>`
+      SELECT up.userId, COUNT(*) as masteredCount
+      FROM UserProgress up
+      JOIN StudySetItem si ON si.id = up.itemId
+      WHERE si.studySetId = ${id}
+        AND si.isDeleted = false
+        AND up.status = 'MASTERED'
+      GROUP BY up.userId
+    `;
+
+    // ===== 6. overdue =====
+    const overduePromise = db.userProgress.count({
+      where: {
+        item: { studySetId: id },
+        nextReview: { lt: new Date() },
+      },
+    });
+
+    // ===== 7. top difficult words =====
+    const difficultWordsPromise = await db.$queryRaw`
+      SELECT 
+        si.id,
+        si.word,
+        si.meaning,
+        si.note,
+        SUM(up.wrongCount) as wrongCount,
+        SUM(up.correctCount) as correctCount
+      FROM UserProgress up
+      JOIN StudySetItem si ON si.id = up.itemId
+      WHERE si.studySetId = ${id}
+      GROUP BY si.id
+      ORDER BY wrongCount DESC
+      LIMIT 5
+    `;
+
+    // ===== RUN PARALLEL =====
+    const [totalItems, totalUsersRaw, statusGroup, accuracyData, completionRows, overdueItems, difficultWords] =
+      await Promise.all([
+        totalItemsPromise,
+        totalUsersPromise,
+        statusPromise,
+        accuracyPromise,
+        completionPromise,
+        overduePromise,
+        difficultWordsPromise,
+      ]);
+
+    // ===== PROCESS =====
+
+    const totalUsersStudied = Number(totalUsersRaw[0]?.total || 0);
+
+    // status
+    const statusDistribution = {
+      NEW: 0,
+      LEARNING: 0,
+      MASTERED: 0,
+    };
+
+    statusGroup.forEach((s) => {
+      statusDistribution[s.status] = s._count.status;
+    });
+
+    // attempts + accuracy
+    const totalCorrect = accuracyData._sum.correctCount || 0;
+    const totalWrong = accuracyData._sum.wrongCount || 0;
+    const totalAttempts = totalCorrect + totalWrong;
+
+    const accuracyRate = totalAttempts === 0 ? 0 : ((totalCorrect / totalAttempts) * 100).toFixed(2);
+
+    const avgAttemptsPerUser = totalUsersStudied === 0 ? 0 : totalAttempts / totalUsersStudied;
+
+    // completion
+    let completedUsers = 0;
+    completionRows.forEach((row) => {
+      if (row.masteredCount === totalItems) {
+        completedUsers++;
+      }
+    });
+
+    const completionRate = totalUsersStudied === 0 ? 0 : (completedUsers / totalUsersStudied) * 100;
+
+    // ===== response =====
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      data: {
+        overview: {
+          totalItems,
+          totalUsersStudied,
+        },
+        progress: {
+          completionRate,
+          statusDistribution,
+        },
+        performance: {
+          accuracyRate,
+          avgAttemptsPerUser,
+        },
+        review: {
+          overdueItems,
+        },
+        content: {
+          difficultWords,
+        },
+      },
+      message_code: MESSAGE_CODES.SUCCESS.GET_SUCCESS,
     });
   } catch (error) {
     console.error(error);

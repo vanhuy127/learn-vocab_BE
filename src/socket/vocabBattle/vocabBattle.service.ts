@@ -2,7 +2,7 @@ import db from '@/config/prisma.config';
 import { Server } from 'socket.io';
 import { roomBySocketId, roomByUserId, rooms, waitingQueue } from './vocabBattle.state';
 import { generateQuestions, goToNextQuestion, startTimer, toQuestionPayload } from './vocabBattle.utils';
-import { Socket } from 'socket.io/dist/socket';
+import { Socket } from 'socket.io';
 
 const cleanupRoomState = (io: Server, roomId: string) => {
   const room = rooms.get(roomId);

@@ -8,6 +8,7 @@ import {
   sendEmailForgotPassword,
   checkTokenAvailable,
   logout,
+  tokenRecovery,
 } from '@/controllers/auth.controller';
 import { authenticate } from '@/middlewares/authenticate';
 import express from 'express';
@@ -31,5 +32,7 @@ authRouter.patch('/auth/forgot-password', sendEmailForgotPassword);
 authRouter.get('/auth/forgot-password/:token', checkTokenAvailable);
 
 authRouter.patch('/auth/reset-password', resetPassword);
+
+authRouter.delete('/auth/token/:token', tokenRecovery);
 
 export default authRouter;
