@@ -523,3 +523,53 @@ export const resetPassword = async (req: Request, res: Response) => {
     });
   }
 };
+
+export const tokenRecovery = async (req: Request, res: Response) => {
+  try {
+    const token = req.params.token;
+
+    if (!token) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.AUTH.TOKEN_REQUIRED,
+      });
+      return;
+    }
+
+    const refreshToken = await db.refreshToken.findUnique({
+      where: {
+        token,
+      },
+    });
+
+    if (!refreshToken) {
+      sendResponse(res, {
+        status: 404,
+        success: false,
+        message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
+      });
+      return;
+    }
+
+    await db.refreshToken.delete({
+      where: {
+        id: refreshToken.id,
+      },
+    });
+
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      message_code: MESSAGE_CODES.SUCCESS.DELETED_SUCCESS,
+    });
+    return;
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};

@@ -7,11 +7,14 @@ import studySetRouter from './routes/studySet.router';
 import testRouter from './routes/test.router';
 import languageRouter from './routes/language.router';
 import { app, server } from './socket/vocabBattle';
+import userRouter from './routes/user.router';
 
 require('dotenv').config();
 
 const cors = require('cors');
+const morgan = require('morgan');
 
+app.use(morgan('dev'));
 app.use(cookieParser());
 app.use(
   cors({
@@ -29,6 +32,7 @@ app.use('/api/v1', folderRouter);
 app.use('/api/v1', studySetRouter);
 app.use('/api/v1', testRouter);
 app.use('/api/v1', languageRouter);
+app.use('/api/v1', userRouter);
 
 server.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
