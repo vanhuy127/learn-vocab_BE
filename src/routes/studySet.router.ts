@@ -8,6 +8,7 @@ import {
   getStudySetById,
   getStudySetCurrent,
   getStudySetForLearnQuiz,
+  restoreStudySet,
   statisticsStudySetById,
   submitManyStudySetItems,
   submitStudySetItem,
@@ -24,6 +25,8 @@ studySetRouter.get('/admin/study-sets', authenticate, authorize(Role.ADMIN), get
 studySetRouter.get('/admin/study-sets/:id/statistics', authenticate, authorize(Role.ADMIN), statisticsStudySetById);
 
 studySetRouter.get('/admin/study-sets/:id', authenticate, authorize(Role.ADMIN), getAdminStudySetById);
+
+studySetRouter.patch('/admin/study-sets/:id/restore', authenticate, authorize(Role.ADMIN), restoreStudySet);
 
 studySetRouter.get('/study-set', getStudySet);
 

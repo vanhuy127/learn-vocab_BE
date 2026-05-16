@@ -21,6 +21,7 @@ export const getAdminStudySet = async (req: Request, res: Response) => {
     const size = parseInt(req.query.size as string) || DEFAULT_SIZE;
     const skip = calculationSkip(page, size);
     const search = (req.query.search as string)?.trim().toLowerCase() || '';
+    const isDeleted = req.query.isDeleted === 'true' ? true : req.query.isDeleted === 'false' ? false : 'all';
 
     const whereClause: any = {
       ...(search && {
@@ -30,7 +31,7 @@ export const getAdminStudySet = async (req: Request, res: Response) => {
           { user: { email: { contains: search } } },
         ],
       }),
-      isDeleted: false,
+      ...(isDeleted !== 'all' && { isDeleted }),
     };
 
     const [studySets, total] = await Promise.all([
@@ -1200,6 +1201,54 @@ export const statisticsStudySetById = async (req: Request, res: Response) => {
         },
       },
       message_code: MESSAGE_CODES.SUCCESS.GET_SUCCESS,
+    });
+  } catch (error) {
+    console.error(error);
+    sendResponse(res, {
+      status: 500,
+      success: false,
+      message_code: MESSAGE_CODES.SERVER.INTERNAL_SERVER_ERROR,
+    });
+  }
+};
+
+export const restoreStudySet = async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id;
+
+    if (!id) {
+      sendResponse(res, {
+        status: 400,
+        success: false,
+        message_code: MESSAGE_CODES.VALIDATION.ID_REQUIRED,
+      });
+      return;
+    }
+
+    const studySet = await db.studySet.findUnique({
+      where: {
+        id,
+      },
+    });
+
+    if (!studySet || !studySet.isDeleted) {
+      sendResponse(res, {
+        status: 404,
+        success: false,
+        message_code: MESSAGE_CODES.SUCCESS.NOT_FOUND,
+      });
+      return;
+    }
+
+    await db.studySet.update({
+      where: { id },
+      data: { isDeleted: false },
+    });
+
+    sendResponse(res, {
+      status: 200,
+      success: true,
+      message_code: MESSAGE_CODES.SUCCESS.RESTORE_SUCCESS,
     });
   } catch (error) {
     console.error(error);
